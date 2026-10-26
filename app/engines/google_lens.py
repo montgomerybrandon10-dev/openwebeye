@@ -1,8 +1,9 @@
-"""Google Lens reverse image search via Playwright."""
-from .base import Engine, Candidate, SearchContext
+"""Google Lens reverse image search."""
+from app.engines.base import Candidate, SearchContext
+from app.engines.browser import BrowserEngine
 
-class GoogleLensEngine(Engine):
+class GoogleLensEngine(BrowserEngine):
     key = "google_lens"
     name = "Google Lens"
-    async def search(self, ctx: SearchContext) -> list:
+    async def search(self, ctx: SearchContext):
         return []

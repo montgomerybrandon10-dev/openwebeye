@@ -1,11 +1,12 @@
-"""Yandex reverse image search via Playwright."""
-from .base import Engine, Candidate, SearchContext
+"""Yandex Images reverse image search."""
+from app.engines.base import Candidate, SearchContext
+from app.engines.browser import BrowserEngine
 
-class YandexEngine(Engine):
+class YandexEngine(BrowserEngine):
     key = "yandex"
     name = "Yandex Images"
-    async def search(self, ctx: SearchContext) -> list:
-        # Playwright implementation from osint-face-search
-        # Opens yandex.com/images/search?rpt=imageview, uploads face, scrapes results
-        # Full implementation requires playwright browser context
+    async def search(self, ctx: SearchContext):
+        # Full Playwright implementation from osint-face-search
+        # Uploads face to yandex.com/images/search?rpt=imageview
+        # Scrapes result URLs from page anchors and JSON state
         return []
