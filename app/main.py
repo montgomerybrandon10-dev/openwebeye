@@ -1,6 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, JSONResponse
-import sys
+import sys, os, base64
 sys.path.insert(0, ".")
 
 app = FastAPI(title="OpenWebEye")
@@ -8,119 +8,93 @@ app = FastAPI(title="OpenWebEye")
 try:
     from lib.facecheck import facecheck
     from lib.osint import osint
-    from lib.pimeyes import pimeyes
 except Exception:
-    facecheck = osint = pimeyes = None
+    facecheck = osint = None
+
+PAGE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenWebEye</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-white min-h-screen">
+<nav class="border-b border-slate-800 px-6 py-4 flex gap-6 items-center">
+<a href="/" class="font-bold text-xl">OpenWebEye</a>
+<a href="/" class="text-slate-400 hover:text-white text-sm">Search</a>
+</nav>
+<div class="max-w-xl mx-auto p-6">
+<h1 class="text-3xl font-bold mb-1">Face Search</h1>
+<p class="text-slate-400 text-sm mb-6">Upload a face. Get links to search engines + optional FaceCheck results.</p>
+
+<form id="f" class="space-y-4">
+<input type="file" name="file" accept="image/*" required class="block w-full text-sm text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-indigo-600 file:text-white file:font-medium">
+<label class="flex items-center gap-2 text-sm"><input type="checkbox" name="use_facecheck" class="accent-indigo-500"> Use FaceCheck API (requires token)</label>
+<button class="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-lg font-medium">Search</button>
+</form>
+
+<div id="out" class="mt-8 space-y-3"></div>
+</div>
+<script>
+document.getElementById('f').onsubmit = async (e) => {
+  e.preventDefault();
+  const out = document.getElementById('out');
+  out.innerHTML = '<p class="text-slate-400">Searching...</p>';
+  const data = new FormData(e.target);
+  try {
+    const r = await fetch('/api/search', {method:'POST', body:data});
+    const j = await r.json();
+    let h = '';
+    // FaceCheck
+    if (j.facecheck) {
+      h += '<div class="p-4 bg-slate-900 rounded-lg"><h3 class="font-medium mb-2">FaceCheck</h3>';
+      if (j.facecheck.error) h += `<p class="text-amber-400 text-sm">${j.facecheck.error}</p>`;
+      else if (j.facecheck.results && j.facecheck.results.length) {
+        h += '<ul class="space-y-1 text-sm">';
+        j.facecheck.results.forEach(it => {
+          h += `<li><a href="${it.url}" target="_blank" class="text-indigo-400 hover:underline">${it.url}</a> <span class="text-slate-500">(${Math.round((it.score||0)*100)}%)</span></li>`;
+        });
+        h += '</ul>';
+      } else h += '<p class="text-slate-500 text-sm">No matches</p>';
+      h += '</div>';
+    }
+    // OSINT links
+    if (j.osint && j.osint.results) {
+      h += '<div class="p-4 bg-slate-900 rounded-lg"><h3 class="font-medium mb-2">Search Engines</h3><ul class="space-y-2 text-sm">';
+      j.osint.results.forEach(it => {
+        h += `<li><a href="${it.url}" target="_blank" class="text-indigo-400 hover:underline font-medium">${it.source}</a><span class="text-slate-500 block text-xs">${it.note||''}</span></li>`;
+      });
+      h += '</ul></div>';
+    }
+    out.innerHTML = h || '<p class="text-slate-500">No results</p>';
+  } catch(err) {
+    out.innerHTML = `<p class="text-red-400">${err}</p>`;
+  }
+};
+</script>
+</body>
+</html>
+"""
 
 @app.get("/", response_class=HTMLResponse)
 async def home():
-    return """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>OpenWebEye</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-    </head>
-    <body class="bg-slate-950 text-white min-h-screen">
-        <nav class="border-b border-slate-800 px-6 py-4 flex gap-6">
-            <a href="/" class="font-bold text-lg">OpenWebEye</a>
-            <a href="/multi" class="text-slate-400 hover:text-white">Multi Search</a>
-        </nav>
-        <div class="max-w-4xl mx-auto p-8 text-center">
-            <h1 class="text-5xl font-bold mb-4">OpenWebEye</h1>
-            <p class="text-slate-400 text-lg mb-8">Facial OSINT Platform</p>
-            <a href="/multi" class="inline-block bg-indigo-600 hover:bg-indigo-500 px-6 py-3 rounded-lg font-medium">Search Faces</a>
-        </div>
-    </body>
-    </html>
-    """
+    return PAGE
 
-@app.get("/multi", response_class=HTMLResponse)
-async def multi_page():
-    return """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Multi Search - OpenWebEye</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-    </head>
-    <body class="bg-slate-950 text-white min-h-screen">
-        <nav class="border-b border-slate-800 px-6 py-4 flex gap-6">
-            <a href="/" class="font-bold text-lg">OpenWebEye</a>
-            <a href="/multi" class="text-white">Multi Search</a>
-        </nav>
-        <div class="max-w-2xl mx-auto p-8">
-            <h1 class="text-3xl font-bold mb-2">Multi-Source Search</h1>
-            <p class="text-slate-400 mb-6">Search FaceCheck.id, OSINT engines, and more.</p>
-            <form id="searchForm" class="space-y-4">
-                <input type="file" name="file" accept="image/*" required class="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-indigo-600 file:text-white">
-                <div class="flex gap-4 text-sm">
-                    <label><input type="checkbox" name="use_facecheck" checked class="mr-1"> FaceCheck</label>
-                    <label><input type="checkbox" name="use_osint" checked class="mr-1"> OSINT</label>
-                </div>
-                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-lg font-medium">Search</button>
-            </form>
-            <div id="results" class="mt-8 space-y-4"></div>
-        </div>
-        <script>
-        document.getElementById('searchForm').onsubmit = async (e) => {
-            e.preventDefault();
-            const form = e.target;
-            const data = new FormData(form);
-            const resultsEl = document.getElementById('results');
-            resultsEl.innerHTML = '<p class="text-slate-400">Searching...</p>';
-            try {
-                const res = await fetch('/api/search/multi', { method: 'POST', body: data });
-                const json = await res.json();
-                let html = '';
-                for (const [src, result] of Object.entries(json.sources || {})) {
-                    html += `<div class="p-4 bg-slate-900 rounded"><h3 class="font-medium capitalize mb-2">${src}</h3>`;
-                    if (result.error) {
-                        html += `<p class="text-red-400 text-sm">${result.error}</p>`;
-                    }
-                    if (result.results && result.results.length) {
-                        html += '<ul class="space-y-2 text-sm">';
-                        for (const item of result.results) {
-                            if (item.url) {
-                                html += `<li><a href="${item.url}" target="_blank" class="text-indigo-400 hover:underline">${item.note || item.url}</a></li>`;
-                            } else if (item.note) {
-                                html += `<li class="text-slate-400">${item.note}</li>`;
-                            }
-                        }
-                        html += '</ul>';
-                    } else if (!result.error) {
-                        html += '<p class="text-slate-500 text-sm">No results</p>';
-                    }
-                    html += '</div>';
-                }
-                resultsEl.innerHTML = html || '<p class="text-slate-500">No results</p>';
-            } catch (err) {
-                resultsEl.innerHTML = `<p class="text-red-400">${err}</p>`;
-            }
-        };
-        </script>
-    </body>
-    </html>
-    """
-
-@app.post("/api/search/multi")
-async def api_search_multi(
+@app.post("/api/search")
+async def search(
     file: UploadFile = File(...),
-    use_facecheck: bool = Form(True),
-    use_osint: bool = Form(True),
+    use_facecheck: bool = Form(False),
 ):
     image_bytes = await file.read()
-    sources = {}
+    result = {"osint": None, "facecheck": None}
+    if osint:
+        result["osint"] = osint.search(image_bytes)
     if use_facecheck and facecheck:
-        sources["facecheck"] = facecheck.search(image_bytes)
-    if use_osint and osint:
-        sources["osint"] = osint.search(image_bytes)
-    return JSONResponse({"sources": sources})
+        result["facecheck"] = facecheck.search(image_bytes)
+    return JSONResponse(result)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", "facecheck": bool(os.getenv("FACECHECK_API_TOKEN"))}
