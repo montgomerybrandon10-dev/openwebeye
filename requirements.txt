@@ -1,0 +1,11 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart
+jinja2
+aiofiles
+numpy>=1.26.0
+opencv-python-headless>=4.9.0
+pillow>=10.4.0
+requests
+python-dotenv
+loguru
