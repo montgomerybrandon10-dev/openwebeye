@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form, Request
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 import sys
 sys.path.insert(0, ".")
@@ -32,7 +32,6 @@ async def home():
             <h1 class="text-5xl font-bold mb-4">OpenWebEye</h1>
             <p class="text-slate-400 text-lg mb-8">Facial OSINT Platform</p>
             <a href="/multi" class="inline-block bg-indigo-600 hover:bg-indigo-500 px-6 py-3 rounded-lg font-medium">Search Faces</a>
-            <p class="text-sm text-slate-500 mt-6">openwebeye.com</p>
         </div>
     </body>
     </html>
@@ -65,27 +64,42 @@ async def multi_page():
                 </div>
                 <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-lg font-medium">Search</button>
             </form>
-            <div id="results" class="mt-8"></div>
+            <div id="results" class="mt-8 space-y-4"></div>
         </div>
         <script>
         document.getElementById('searchForm').onsubmit = async (e) => {
             e.preventDefault();
             const form = e.target;
             const data = new FormData(form);
-            document.getElementById('results').innerHTML = '<p class="text-slate-400">Searching...</p>';
+            const resultsEl = document.getElementById('results');
+            resultsEl.innerHTML = '<p class="text-slate-400">Searching...</p>';
             try {
                 const res = await fetch('/api/search/multi', { method: 'POST', body: data });
                 const json = await res.json();
                 let html = '';
                 for (const [src, result] of Object.entries(json.sources || {})) {
-                    html += `<div class="mb-4 p-4 bg-slate-900 rounded"><h3 class="font-medium capitalize">${src}</h3>`;
-                    if (result.error) html += `<p class="text-red-400 text-sm">${result.error}</p>`;
-                    else if (result.results) html += `<p class="text-sm text-slate-400">${result.results.length} results</p>`;
+                    html += `<div class="p-4 bg-slate-900 rounded"><h3 class="font-medium capitalize mb-2">${src}</h3>`;
+                    if (result.error) {
+                        html += `<p class="text-red-400 text-sm">${result.error}</p>`;
+                    }
+                    if (result.results && result.results.length) {
+                        html += '<ul class="space-y-2 text-sm">';
+                        for (const item of result.results) {
+                            if (item.url) {
+                                html += `<li><a href="${item.url}" target="_blank" class="text-indigo-400 hover:underline">${item.note || item.url}</a></li>`;
+                            } else if (item.note) {
+                                html += `<li class="text-slate-400">${item.note}</li>`;
+                            }
+                        }
+                        html += '</ul>';
+                    } else if (!result.error) {
+                        html += '<p class="text-slate-500 text-sm">No results</p>';
+                    }
                     html += '</div>';
                 }
-                document.getElementById('results').innerHTML = html || '<p>No results</p>';
+                resultsEl.innerHTML = html || '<p class="text-slate-500">No results</p>';
             } catch (err) {
-                document.getElementById('results').innerHTML = `<p class="text-red-400">${err}</p>`;
+                resultsEl.innerHTML = `<p class="text-red-400">${err}</p>`;
             }
         };
         </script>
@@ -109,4 +123,4 @@ async def api_search_multi(
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "site": "https://www.openwebeye.com"}
+    return {"status": "ok"}
